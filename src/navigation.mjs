@@ -42,7 +42,7 @@ export async function executeCloseConfirmation({data,state,messageId,closeOne,on
  try{
   for(const id of draft.ids){
    try{
-    const result=await closeOne(id,{solution:draft.solution,minutes:draft.minutes});
+    const result=await closeOne(id,{solution:draft.solution,minutes:draft.minutes,operationId:draft.revision,scope:confirmed.kind});
     results.push({id,state:result.state});
     onResult({id,result,draft});
    }catch(error){

@@ -8,4 +8,7 @@
 - [ ] no personal names, internal URLs, Telegram IDs or organization-specific IDs
 - [ ] callback payloads stay within Telegram's 64-byte limit
 - [ ] mutation paths retain preview, confirmation, fresh read and verification
+- [ ] API `409 Conflict` blocks retry and legacy fallback
+- [ ] ambiguous expense writes remain `uncertain` and are not blindly replayed
+- [ ] Playwright remains available when API is disabled or safely falls back
 - [ ] GitHub Actions passes on the public repository

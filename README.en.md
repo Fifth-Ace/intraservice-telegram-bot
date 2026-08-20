@@ -23,7 +23,8 @@ reusable solution templates in SQLite.
 - reusable solution templates with categories, popular templates, pagination and default work time;
 - manual solution and minute entry;
 - ticket creation from Telegram;
-- Playwright and Chromium connection to IntraService;
+- official IntraService 5.51.x API transport with Playwright retained as a permanent fallback;
+- API-primary reads, creation and confirmed closing with SQLite recovery;
 - direct Telegram connection or HTTP(S) CONNECT proxy;
 - systemd user service;
 - offline self-tests and GitHub Actions CI.
@@ -45,6 +46,16 @@ draft → preview → explicit confirmation
 For closing, the bot verifies the final status, exact solution text and work-time
 record. An HTTP `200` response alone is not considered success. Batch operations
 run sequentially and report a separate result for every ticket.
+
+The beta transport chain is:
+
+```text
+official API → Playwright compatibility/emergency fallback
+```
+
+API closing stores durable checkpoints in SQLite, uses `Changed`, stops on
+`409 Conflict`, and never blindly repeats a mutation after a timeout. See
+[docs/API_BETA.md](docs/API_BETA.md) for staged opt-in and rollback instructions.
 
 ## Requirements
 
@@ -88,7 +99,11 @@ Then adapt `config.json` to your IntraService installation:
 - `fields`: HTML field names for requester, location, cabinet and solution;
 - `statuses`: open and closed status IDs;
 - `list_columns`: ticket-list column indexes;
-- `locations`, `executors`, `categories`: internal IDs and short Telegram keys.
+- `locations`, `executors`, `categories`: internal IDs and short Telegram keys;
+- `api`: opt-in official API service/type IDs and individual mutation flags.
+
+For an immediate rollback to `v0.1.0` behavior, set `api.enabled=false` and
+restart the service. Playwright and the browser profile remain available.
 
 All values in `config.example.json` are synthetic. Do not copy them into a live
 system without checking your own forms and IDs.
@@ -149,6 +164,7 @@ journalctl --user -u intraservice-telegram-bot.service -f
 |---|---|
 | [Complete English manual](docs/en/MANUAL.md) | Installation, configuration, ID discovery, workflows, systemd, backups and troubleshooting |
 | [Полный русский мануал](docs/ru/MANUAL.md) | Полное руководство по установке и администрированию на русском языке |
+| [Official API beta](docs/API_BETA.md) | Opt-in, transport safety, recovery, rollback and compatibility notes |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Rules for changes and pull requests |
 | [Releases](https://github.com/Fifth-Ace/intraservice-telegram-bot/releases) | Published versions and release notes |

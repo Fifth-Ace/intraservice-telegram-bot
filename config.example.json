@@ -7,6 +7,13 @@
   "task_list_pages": 20,
   "task_table_index": 2,
   "list_columns": {"id": 1, "status": 2, "title": 3, "executor": 5, "changed": 7},
+  "api": {
+    "enabled": false,
+    "service_id": "10",
+    "task_type_id": "20",
+    "timeout_ms": 15000,
+    "mutations": {"create": false, "close": false, "batch_close": false}
+  },
   "selectors": {"login": "#login", "password": "#password", "login_form": "form"},
   "fields": {
     "requester": "field1001",

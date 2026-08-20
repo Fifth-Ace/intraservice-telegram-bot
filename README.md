@@ -23,7 +23,8 @@ Telegram-интерфейс для IntraService, который можно ра�
 - шаблоны решений с категориями, популярными шаблонами, пагинацией и рекомендуемыми трудозатратами;
 - ручной ввод решения и минут;
 - создание заявок через Telegram;
-- подключение к IntraService через Playwright и Chromium;
+- подключение к IntraService через официальный API 5.51.x с Playwright как постоянным резервом;
+- API-primary чтение, создание и подтверждённое закрытие с SQLite recovery;
 - прямое подключение к Telegram или HTTP(S) CONNECT-прокси;
 - пользовательский systemd-сервис;
 - автономные тесты и GitHub Actions CI.
@@ -44,6 +45,16 @@ Node.js.
 При закрытии проверяются итоговый статус, точный текст решения и трудозатраты.
 Один только HTTP-ответ `200` не считается успехом. Массовая обработка выполняется
 последовательно с отдельным результатом для каждой заявки.
+
+В beta-ветке транспорт устроен так:
+
+```text
+официальный API → Playwright compatibility/emergency fallback
+```
+
+API-закрытие сохраняет durable checkpoints в SQLite, использует `Changed`,
+останавливается на `409 Conflict` и не повторяет вслепую mutation после timeout.
+Инструкция по безопасному включению: [docs/API_BETA.md](docs/API_BETA.md).
 
 ## Требования
 
@@ -87,7 +98,11 @@ CONFIG_PATH=config.json
 - `fields` — HTML-имена полей заявителя, местонахождения, кабинета и решения;
 - `statuses` — ID открытого и закрытого статусов;
 - `list_columns` — индексы колонок списка заявок;
-- `locations`, `executors`, `categories` — внутренние ID и короткие Telegram-ключи.
+- `locations`, `executors`, `categories` — внутренние ID и короткие Telegram-ключи;
+- `api` — opt-in официальный API: service/type ID и отдельные mutation flags.
+
+Для немедленного отката к поведению `v0.1.0` установите `api.enabled=false` и
+перезапустите сервис; Playwright и browser profile остаются на месте.
 
 Значения в `config.example.json` синтетические. Их нельзя без проверки переносить
 в рабочую систему.
@@ -148,6 +163,7 @@ journalctl --user -u intraservice-telegram-bot.service -f
 |---|---|
 | [Полный русский мануал](docs/ru/MANUAL.md) | Установка, конфигурация, поиск ID, сценарии, systemd, backup и решение проблем |
 | [Full English manual](docs/en/MANUAL.md) | Complete English installation and administration guide |
+| [Official API beta](docs/API_BETA.md) | Безопасное включение API, recovery, rollback и ограничения beta |
 | [SECURITY.md](SECURITY.md) | Правила безопасности и сообщение об уязвимостях |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Требования к изменениям и pull requests |
 | [Releases](https://github.com/Fifth-Ace/intraservice-telegram-bot/releases) | Опубликованные версии и примечания к релизам |
