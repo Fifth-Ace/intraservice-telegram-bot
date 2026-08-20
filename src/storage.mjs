@@ -1,0 +1,21 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
+
+export class Storage{
+ constructor(file){fs.mkdirSync(path.dirname(file),{recursive:true});this.db=new DatabaseSync(file);this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
+ CREATE TABLE IF NOT EXISTS templates(id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,name TEXT NOT NULL,solution TEXT NOT NULL,default_minutes INTEGER NOT NULL CHECK(default_minutes BETWEEN 1 AND 1440),active INTEGER NOT NULL DEFAULT 1,use_count INTEGER NOT NULL DEFAULT 0,last_used_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS selections(chat_id TEXT NOT NULL,user_id TEXT NOT NULL,ticket_id TEXT NOT NULL,selected_at TEXT NOT NULL,expires_at TEXT NOT NULL,PRIMARY KEY(chat_id,user_id,ticket_id));
+ CREATE INDEX IF NOT EXISTS selections_expiry ON selections(expires_at);
+ CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,user_id TEXT,action TEXT NOT NULL,ticket_id TEXT,result TEXT NOT NULL,details TEXT);`)}
+ close(){this.db.close()}
+ audit({userId='',action,ticketId='',result='ok',details={}}){this.db.prepare('INSERT INTO audit(at,user_id,action,ticket_id,result,details) VALUES(?,?,?,?,?,?)').run(new Date().toISOString(),String(userId),action,String(ticketId),result,JSON.stringify(details))}
+ addTemplate({category,name,solution,minutes}){category=String(category||'').trim();name=String(name||'').trim();solution=String(solution||'').trim();minutes=Number(minutes);if(!category||!name||!solution||!Number.isInteger(minutes)||minutes<1||minutes>1440)throw Error('TEMPLATE_INVALID');const now=new Date().toISOString();return Number(this.db.prepare('INSERT INTO templates(category,name,solution,default_minutes,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(category,name,solution,minutes,now,now).lastInsertRowid)}
+ listTemplates({active=true,limit=20}={}){return this.db.prepare(`SELECT * FROM templates WHERE active=? ORDER BY use_count DESC,COALESCE(last_used_at,updated_at) DESC,name LIMIT ?`).all(active?1:0,Math.max(1,Math.min(Number(limit)||20,50)))}
+ getTemplate(id,{activeOnly=false}={}){return this.db.prepare(`SELECT * FROM templates WHERE id=?${activeOnly?' AND active=1':''}`).get(Number(id))||null}
+ toggleTemplate(id){const row=this.getTemplate(id);if(!row)return null;this.db.prepare('UPDATE templates SET active=?,updated_at=? WHERE id=?').run(row.active?0:1,new Date().toISOString(),Number(id));return this.getTemplate(id)}
+ markTemplateUsed(id){this.db.prepare('UPDATE templates SET use_count=use_count+1,last_used_at=? WHERE id=? AND active=1').run(new Date().toISOString(),Number(id))}
+ getSelection(chatId,userId){const now=new Date().toISOString();this.db.prepare('DELETE FROM selections WHERE expires_at<=?').run(now);return this.db.prepare('SELECT ticket_id FROM selections WHERE chat_id=? AND user_id=? AND expires_at>? ORDER BY selected_at').all(String(chatId),String(userId),now).map(x=>String(x.ticket_id))}
+ toggleSelection(chatId,userId,ticketId,{max=10,ttlMs=7200000}={}){const chat=String(chatId),user=String(userId),ticket=String(ticketId),now=new Date().toISOString(),existing=this.db.prepare('SELECT 1 FROM selections WHERE chat_id=? AND user_id=? AND ticket_id=?').get(chat,user,ticket);this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('DELETE FROM selections WHERE expires_at<=?').run(now);if(existing)this.db.prepare('DELETE FROM selections WHERE chat_id=? AND user_id=? AND ticket_id=?').run(chat,user,ticket);else{const count=Number(this.db.prepare('SELECT COUNT(*) n FROM selections WHERE chat_id=? AND user_id=?').get(chat,user).n);if(count>=max)throw Error('SELECTION_LIMIT');this.db.prepare('INSERT INTO selections(chat_id,user_id,ticket_id,selected_at,expires_at) VALUES(?,?,?,?,?)').run(chat,user,ticket,now,new Date(Date.now()+ttlMs).toISOString())}this.db.exec('COMMIT')}catch(e){this.db.exec('ROLLBACK');throw e}return this.getSelection(chat,user)}
+ clearSelection(chatId,userId){this.db.prepare('DELETE FROM selections WHERE chat_id=? AND user_id=?').run(String(chatId),String(userId))}
+}

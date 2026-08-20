@@ -1,0 +1,22 @@
+{
+  "base_url": "https://helpdesk.example.com",
+  "headless": true,
+  "browser_profile_dir": "data/browser-profile",
+  "database_path": "data/community.sqlite3",
+  "template_task_id": "1000",
+  "task_list_pages": 20,
+  "task_table_index": 2,
+  "list_columns": {"id": 1, "status": 2, "title": 3, "executor": 5, "changed": 7},
+  "selectors": {"login": "#login", "password": "#password", "login_form": "form"},
+  "fields": {
+    "requester": "field1001",
+    "location": "field1002",
+    "cabinet": "field1003",
+    "solution": "field1004"
+  },
+  "statuses": {"open": "1", "closed": "2"},
+  "defaults": {"requester": "Default Requester", "work_minutes": 15, "category": "workstation"},
+  "locations": [{"key": "main", "id": "1", "name": "Main office"}],
+  "executors": [{"key": "admin", "telegram_user_id": "123456789", "intraservice_user_id": "100", "name": "Service Desk Admin"}],
+  "categories": [{"key": "workstation", "ids": ["1"], "name": "Workstation"}]
+}

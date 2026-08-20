@@ -1,0 +1,17 @@
+{
+  "name": "intraservice-telegram-bot",
+  "version": "0.1.0",
+  "description": "Self-hosted Telegram interface for IntraService with safe confirmations, templates and batch closing",
+  "license": "MIT",
+  "type": "module",
+  "engines": {"node": ">=22.5"},
+  "scripts": {
+    "start": "node --no-warnings src/app.mjs",
+    "setup": "node --no-warnings src/setup.mjs",
+    "validate": "node --no-warnings src/validate.mjs",
+    "check": "for f in src/*.mjs test/*.mjs; do node --check \"$f\" || exit 1; done",
+    "test": "node --no-warnings test/self-test.mjs",
+    "ci": "npm run check && npm test && npm run validate -- --examples"
+  },
+  "dependencies": {"playwright": "1.62.0"}
+}

@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+export const ROOT=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+export function parseEnv(text){const out={};for(const line of String(text||'').split(/\r?\n/)){const m=line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);if(m)out[m[1]]=m[2].replace(/^['"]|['"]$/g,'')}return out}
+export function readEnv(file=path.join(ROOT,'.env')){return fs.existsSync(file)?parseEnv(fs.readFileSync(file,'utf8')):{}}
+export function readConfig(file=path.join(ROOT,'config.json')){return JSON.parse(fs.readFileSync(file,'utf8'))}
+
+export function validateConfig(c){const errors=[];const requiredString=(v,n)=>{if(typeof v!=='string'||!v.trim())errors.push(`${n} must be a non-empty string`)};requiredString(c?.base_url,'base_url');if(c?.base_url&&!/^https?:\/\//u.test(c.base_url))errors.push('base_url must start with http:// or https://');requiredString(c?.template_task_id,'template_task_id');requiredString(c?.database_path,'database_path');requiredString(c?.browser_profile_dir,'browser_profile_dir');for(const n of ['requester','location','cabinet','solution'])requiredString(c?.fields?.[n],`fields.${n}`);for(const n of ['open','closed'])requiredString(c?.statuses?.[n],`statuses.${n}`);if(!Array.isArray(c?.locations)||!c.locations.length)errors.push('locations must contain at least one item');if(!Array.isArray(c?.executors)||!c.executors.length)errors.push('executors must contain at least one item');if(!Array.isArray(c?.categories)||!c.categories.length)errors.push('categories must contain at least one item');for(const [name,rows] of [['locations',c?.locations||[]],['executors',c?.executors||[]],['categories',c?.categories||[]]]){const keys=new Set;for(const row of rows){requiredString(row?.key,`${name}.key`);if(keys.has(row?.key))errors.push(`${name}: duplicate key ${row.key}`);keys.add(row?.key)}}return errors}
+
+export function loadRuntime({root=ROOT,envFile=path.join(root,'.env'),configFile}={}){const env=readEnv(envFile),resolvedConfig=configFile||path.resolve(root,env.CONFIG_PATH||'config.json'),config=readConfig(resolvedConfig),errors=validateConfig(config);if(errors.length)throw Error(`CONFIG_INVALID:\n- ${errors.join('\n- ')}`);const allowedUsers=(env.TELEGRAM_ALLOWED_USERS||'').split(',').map(x=>x.trim()).filter(Boolean);if(!env.TELEGRAM_BOT_TOKEN)throw Error('TELEGRAM_BOT_TOKEN is missing');if(!allowedUsers.length)throw Error('TELEGRAM_ALLOWED_USERS is empty');if(!env.INTRASERVICE_LOGIN||!env.INTRASERVICE_PASSWORD)throw Error('IntraService credentials are missing');return{root,env,config,allowedUsers,paths:{db:path.resolve(root,config.database_path),profile:path.resolve(root,config.browser_profile_dir)}}}

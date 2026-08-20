@@ -1,0 +1,29 @@
+# Runtime secrets and local configuration
+.env
+config.json
+
+# Runtime state
+/data/
+/logs/
+*.sqlite*
+*.db*
+*.log*
+
+# Browser authentication data
+/browser-profile*/
+/storage-state*.json
+/cookies*.json
+
+# Dependencies and generated output
+/node_modules/
+coverage/
+dist/
+playwright-report/
+test-results/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
