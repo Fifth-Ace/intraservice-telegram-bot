@@ -1,105 +1,107 @@
 # IntraService Telegram Bot Community Edition
 
-[English](README.md) | [Русский](README.ru.md)
+[Русский](README.md) | [English](README.en.md)
 
-A self-hosted Telegram interface for IntraService. The bot lets a service desk
-view tickets, open ticket cards, create tickets, close one or several tickets,
-and maintain reusable solution templates without exposing IntraService directly
-to Telegram users.
+Самостоятельно разворачиваемый Telegram-интерфейс для IntraService. Через бота
+служба поддержки может просматривать заявки и карточки, создавать и закрывать
+заявки, обрабатывать несколько заявок последовательно и использовать каталог
+готовых решений. Пользователям Telegram не требуется прямой доступ к интерфейсу
+IntraService.
 
-The project is designed for cautious production use. Choosing a template does
-not change a ticket. Every create or close operation has a preview, requires an
-explicit confirmation, reads the ticket immediately before the change, and
-reads it again after saving to verify the result.
+Проект рассчитан на осторожную работу с production. Выбор шаблона ничего не
+изменяет сам по себе. Перед созданием или закрытием бот показывает предпросмотр
+и требует отдельного подтверждения. Непосредственно перед изменением карточка
+читается заново, а после сохранения бот повторно проверяет результат.
 
-> This community project is not affiliated with IntraService or Telegram.
+> Это независимый community-проект, не связанный с разработчиками IntraService
+> или Telegram.
 
-## Contents
+## Содержание
 
-- [What the bot can do](#what-the-bot-can-do)
-- [How changes are protected](#how-changes-are-protected)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Creating a Telegram bot](#creating-a-telegram-bot)
-- [Environment configuration](#environment-configuration)
-- [IntraService configuration](#intraservice-configuration)
-- [Finding your IntraService IDs and field names](#finding-your-intraservice-ids-and-field-names)
-- [First run](#first-run)
-- [Telegram commands and workflows](#telegram-commands-and-workflows)
-- [Running with systemd](#running-with-systemd)
-- [Updating](#updating)
-- [Data and backups](#data-and-backups)
-- [Testing](#testing)
-- [Troubleshooting](#troubleshooting)
-- [Security notes](#security-notes)
-- [Current limitations](#current-limitations)
+- [Возможности](#возможности)
+- [Как защищены изменения](#как-защищены-изменения)
+- [Требования](#требования)
+- [Установка](#установка)
+- [Создание Telegram-бота](#создание-telegram-бота)
+- [Настройка окружения](#настройка-окружения)
+- [Настройка IntraService](#настройка-intraservice)
+- [Как найти ID и имена полей IntraService](#как-найти-id-и-имена-полей-intraservice)
+- [Первый запуск](#первый-запуск)
+- [Команды и сценарии Telegram](#команды-и-сценарии-telegram)
+- [Запуск через systemd](#запуск-через-systemd)
+- [Обновление](#обновление)
+- [Данные и резервное копирование](#данные-и-резервное-копирование)
+- [Тестирование](#тестирование)
+- [Решение проблем](#решение-проблем)
+- [Безопасность](#безопасность)
+- [Текущие ограничения](#текущие-ограничения)
 
-## What the bot can do
+## Возможности
 
-- restrict access to an explicit Telegram user allowlist;
-- connect to Telegram directly or through an HTTP(S) CONNECT proxy;
-- authenticate in IntraService with Playwright and a persistent Chromium profile;
-- display open tickets with pagination;
-- display ticket cards with status, description, location, cabinet, executor,
-  category and solution;
-- switch between a normal full-width ticket list and a full-width selection mode;
-- preserve the current selection in SQLite for two hours;
-- select up to 10 tickets;
-- close one ticket or process a batch sequentially;
-- use reusable solution templates with default work time;
-- enter a solution and work time manually;
-- create tickets from a structured Telegram command;
-- keep templates, selections and a compact operation audit in SQLite;
-- run as a systemd user service;
-- test configuration and core logic without contacting a live helpdesk.
+- доступ только для Telegram ID из явного белого списка;
+- прямое подключение к Telegram или работа через HTTP(S) CONNECT-прокси;
+- авторизация в IntraService через Playwright и постоянный профиль Chromium;
+- список открытых заявок с постраничной навигацией;
+- карточки со статусом, описанием, местонахождением, кабинетом, исполнителем,
+  категорией и решением;
+- обычный полноширинный список и отдельный полноширинный режим выбора;
+- хранение текущего выбора в SQLite в течение двух часов;
+- выбор до 10 заявок;
+- одиночное закрытие и последовательная обработка группы заявок;
+- шаблоны решений с рекомендуемыми трудозатратами;
+- ручной ввод решения и минут;
+- создание заявок структурированной командой;
+- хранение шаблонов, выбора и краткого аудита операций в SQLite;
+- запуск в виде пользовательского сервиса systemd;
+- проверка конфигурации и основной логики без подключения к рабочему сервис-деску.
 
-Redis and PostgreSQL are not required. Node.js uses its built-in SQLite driver.
+Redis и PostgreSQL не нужны. Используется встроенный SQLite-драйвер Node.js.
 
-## How changes are protected
+## Как защищены изменения
 
-Creating and closing tickets use the following sequence:
+Создание и закрытие выполняются по следующей схеме:
 
 ```text
-draft
-→ preview
-→ explicit user confirmation
-→ fresh read from IntraService
-→ save
-→ read the ticket again
-→ verify the saved result
+черновик
+→ предпросмотр
+→ явное подтверждение пользователя
+→ свежее чтение карточки из IntraService
+→ сохранение
+→ повторное чтение карточки
+→ проверка сохранённого результата
 ```
 
-For a close operation, the bot checks the final status, exact solution text and
-work-time record. An HTTP `200` response alone is not considered success.
+При закрытии бот проверяет итоговый статус, точный текст решения и запись
+трудозатрат. Один только HTTP-ответ `200` не считается успешным результатом.
 
-Batch closing processes tickets one at a time. Each ticket receives its own
-result in the final report. A failed ticket is reported as failed instead of
-being silently marked as completed.
+Массовое закрытие идёт последовательно, по одной заявке. В итоговом сообщении
+показывается результат каждой операции. Если отдельная заявка не закрылась, бот
+не маскирует ошибку под успешное выполнение.
 
-A solution template only fills the draft solution and minutes. It never closes
-a ticket by itself.
+Шаблон решения только заполняет текст и минуты в черновике. Нажатие на шаблон
+не закрывает заявку.
 
-## Requirements
+## Требования
 
-- Linux is recommended. Other operating systems may work if Playwright supports
-  them, but the included service unit targets systemd user services.
-- Node.js 22.5 or newer. Node.js 22 LTS is recommended.
-- npm 10 or newer.
-- Chromium installed through Playwright.
-- An IntraService account allowed to view, create and close tickets.
-- A Telegram bot token from [@BotFather](https://t.me/BotFather).
-- Numeric Telegram IDs of every person allowed to use the bot.
+- Рекомендуется Linux. На других системах бот может работать при наличии
+  поддержки Playwright, но готовый unit предназначен для systemd user services.
+- Node.js 22.5 или новее. Рекомендуется Node.js 22 LTS.
+- npm 10 или новее.
+- Chromium, установленный через Playwright.
+- Учётная запись IntraService с правами чтения, создания и закрытия заявок.
+- Токен Telegram-бота от [@BotFather](https://t.me/BotFather).
+- Числовые Telegram ID всех пользователей, которым разрешена работа с ботом.
 
-Check the installed versions:
+Проверка версий:
 
 ```bash
 node --version
 npm --version
 ```
 
-## Installation
+## Установка
 
-Clone the public repository and install the locked dependencies:
+Клонируйте публичный репозиторий и установите зафиксированные зависимости:
 
 ```bash
 git clone https://github.com/Fifth-Ace/intraservice-telegram-bot.git
@@ -108,47 +110,45 @@ npm ci
 npm run setup
 ```
 
-`npm run setup` creates local files from the safe examples:
+Команда `npm run setup` создаёт локальные файлы из безопасных примеров:
 
 ```text
-.env.example       → .env
+.env.example        → .env
 config.example.json → config.json
 ```
 
-It also creates `data/` and `logs/`. Existing `.env` and `config.json` files are
-left untouched.
+Также создаются каталоги `data/` и `logs/`. Если `.env` или `config.json` уже
+существуют, команда их не перезаписывает.
 
-Install Chromium:
+Установите Chromium:
 
 ```bash
 npx playwright install chromium
 ```
 
-If the machine is missing Chromium system libraries and you have administrator
-access, Playwright can install them too:
+Если системе не хватает библиотек Chromium и у вас есть административные права:
 
 ```bash
 npx playwright install --with-deps chromium
 ```
 
-Do not run the bot yet. Configure `.env` and `config.json` first.
+До заполнения `.env` и `config.json` запускать бота не нужно.
 
-## Creating a Telegram bot
+## Создание Telegram-бота
 
-1. Open [@BotFather](https://t.me/BotFather) in Telegram.
-2. Send `/newbot` and follow its prompts.
-3. Store the issued token in `TELEGRAM_BOT_TOKEN` inside `.env`.
-4. Start a private chat with the new bot and press **Start**.
-5. Add your numeric Telegram user ID to `TELEGRAM_ALLOWED_USERS`.
+1. Откройте [@BotFather](https://t.me/BotFather) в Telegram.
+2. Отправьте `/newbot` и выполните его инструкции.
+3. Запишите полученный токен в `TELEGRAM_BOT_TOKEN` файла `.env`.
+4. Откройте личный чат с новым ботом и нажмите **Start**.
+5. Добавьте свой числовой Telegram ID в `TELEGRAM_ALLOWED_USERS`.
 
-If you do not know your numeric ID, use a trusted ID lookup bot temporarily or
-start this bot after initial configuration and send `/id` from an already
-allowed account. Do not use a Telegram username in the allowlist; the bot
-expects numeric IDs.
+Если ID неизвестен, временно воспользуйтесь доверенным ботом для определения ID
+или после начальной настройки отправьте `/id` с уже разрешённой учётной записи.
+Имя пользователя Telegram для белого списка не подходит: нужны именно цифры.
 
-## Environment configuration
+## Настройка окружения
 
-Edit `.env`:
+Откройте `.env`:
 
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace_me
@@ -160,34 +160,35 @@ INTRASERVICE_PASSWORD=replace_with_a_strong_password
 CONFIG_PATH=config.json
 ```
 
-| Variable | Required | Meaning |
+| Переменная | Обязательна | Назначение |
 |---|---:|---|
-| `TELEGRAM_BOT_TOKEN` | yes | Token issued by BotFather |
-| `TELEGRAM_ALLOWED_USERS` | yes | Comma-separated numeric Telegram user IDs |
-| `TELEGRAM_PROXY` | no | HTTP or HTTPS proxy URL used for Telegram API calls |
-| `TELEGRAM_BOT_USERNAME` | no | Bot username without `@`; used for addressed group commands |
-| `INTRASERVICE_LOGIN` | yes | IntraService account login |
-| `INTRASERVICE_PASSWORD` | yes | IntraService account password |
-| `CONFIG_PATH` | no | Configuration path relative to the repository root |
+| `TELEGRAM_BOT_TOKEN` | да | Токен, выданный BotFather |
+| `TELEGRAM_ALLOWED_USERS` | да | Числовые Telegram ID через запятую |
+| `TELEGRAM_PROXY` | нет | HTTP- или HTTPS-прокси для запросов к Telegram API |
+| `TELEGRAM_BOT_USERNAME` | нет | Имя бота без `@` для адресных команд в группе |
+| `INTRASERVICE_LOGIN` | да | Логин учётной записи IntraService |
+| `INTRASERVICE_PASSWORD` | да | Пароль учётной записи IntraService |
+| `CONFIG_PATH` | нет | Путь к конфигурации относительно корня проекта |
 
-A proxy with local credentials may use this form:
+Пример прокси с локальными учётными данными:
 
 ```dotenv
 TELEGRAM_PROXY=http://proxy_user:proxy_password@proxy.example.com:3128
 ```
 
-Protect the file:
+Ограничьте доступ к файлам:
 
 ```bash
 chmod 600 .env config.json
 ```
 
-Never commit `.env` or send it in an issue. It contains credentials.
+Никогда не добавляйте `.env` в Git и не публикуйте его в issue. В нём находятся
+учётные данные.
 
-## IntraService configuration
+## Настройка IntraService
 
-Edit `config.json`. The supplied values are synthetic placeholders and will not
-match your installation automatically.
+Откройте `config.json`. Все значения в примере синтетические. Они не обязаны
+совпадать с вашей установкой IntraService.
 
 ```json
 {
@@ -242,41 +243,41 @@ match your installation automatically.
 }
 ```
 
-### Main settings
+### Основные параметры
 
-| Key | Meaning |
+| Параметр | Назначение |
 |---|---|
-| `base_url` | IntraService origin without a trailing task path |
-| `headless` | `true` runs Chromium without a visible window |
-| `browser_profile_dir` | Persistent Playwright login profile |
-| `database_path` | SQLite database for templates, selections and audit rows |
-| `template_task_id` | Existing generic ticket used as the source form for creation |
-| `task_list_pages` | Maximum number of list pages read during one refresh |
-| `task_table_index` | Zero-based table index on the IntraService list page |
-| `list_columns` | Zero-based cell indexes inside each ticket row |
-| `selectors` | CSS selectors used on the login page |
-| `fields` | HTML `name` attributes of custom ticket fields |
-| `statuses` | IntraService status IDs used when creating and closing tickets |
-| `defaults` | Default requester and related creation defaults |
-| `locations` | Short Telegram keys mapped to IntraService location IDs |
-| `executors` | Telegram keys mapped to IntraService executor IDs |
-| `categories` | Telegram keys mapped to one or more category IDs |
+| `base_url` | Адрес IntraService без пути к конкретной заявке |
+| `headless` | При `true` Chromium работает без видимого окна |
+| `browser_profile_dir` | Постоянный профиль авторизации Playwright |
+| `database_path` | SQLite с шаблонами, выбором и кратким аудитом |
+| `template_task_id` | Существующая универсальная заявка, чья форма используется при создании |
+| `task_list_pages` | Максимальное число страниц, читаемых за одно обновление |
+| `task_table_index` | Индекс таблицы заявок, начиная с нуля |
+| `list_columns` | Индексы ячеек в строке заявки, начиная с нуля |
+| `selectors` | CSS-селекторы страницы входа |
+| `fields` | HTML-атрибуты `name` дополнительных полей заявки |
+| `statuses` | ID статусов для создания и закрытия |
+| `defaults` | Заявитель и другие значения по умолчанию |
+| `locations` | Короткие Telegram-ключи и ID местонахождений |
+| `executors` | Telegram-ключи и ID исполнителей IntraService |
+| `categories` | Telegram-ключи и один или несколько ID категорий |
 
-### Locations
+### Местонахождения
 
-Each location requires a short unique `key`, its real IntraService `id`, and a
-human-readable `name`:
+Для каждого местонахождения задаются уникальный короткий `key`, настоящий ID
+IntraService и понятное название:
 
 ```json
 "locations": [
-  {"key": "hq", "id": "12", "name": "Head office"},
-  {"key": "warehouse", "id": "19", "name": "Warehouse"}
+  {"key": "hq", "id": "12", "name": "Главный офис"},
+  {"key": "warehouse", "id": "19", "name": "Склад"}
 ]
 ```
 
-Users type the key when creating a ticket.
+При создании заявки пользователь вводит короткий ключ.
 
-### Executors
+### Исполнители
 
 ```json
 "executors": [
@@ -284,196 +285,201 @@ Users type the key when creating a ticket.
     "key": "alex",
     "telegram_user_id": "123456789",
     "intraservice_user_id": "45",
-    "name": "Alex Smith"
+    "name": "Тестовый администратор"
   }
 ]
 ```
 
-`telegram_user_id` identifies the Telegram account. `intraservice_user_id` is
-the executor option value in IntraService. Keep both values as JSON strings.
+`telegram_user_id` определяет учётную запись Telegram.
+`intraservice_user_id` соответствует значению исполнителя в форме IntraService.
+Оба идентификатора лучше хранить как JSON-строки.
 
-### Categories
+### Категории
 
-One Telegram category may map to several IntraService categories:
+Одна категория Telegram может соответствовать нескольким категориям
+IntraService:
 
 ```json
 "categories": [
-  {"key": "printer", "ids": ["7", "9"], "name": "Printer and hardware"},
-  {"key": "software", "ids": ["11"], "name": "Software"}
+  {"key": "printer", "ids": ["7", "9"], "name": "Принтеры и оборудование"},
+  {"key": "software", "ids": ["11"], "name": "Программное обеспечение"}
 ]
 ```
 
-## Finding your IntraService IDs and field names
+## Как найти ID и имена полей IntraService
 
-IntraService installations often use different custom fields. Values such as
-`field1001` in the example are not universal.
+В разных установках IntraService дополнительные поля часто отличаются. Имена
+вроде `field1001` из примера не являются универсальными.
 
-1. Sign in to IntraService in a regular browser.
-2. Open an existing ticket in edit mode.
-3. Open the browser developer tools.
-4. Inspect the ticket form fields.
-5. Copy the HTML `name` attribute for requester, location, cabinet and solution.
-6. Inspect the selected `<option value="...">` for statuses, locations,
-   executors and categories.
-7. Put those values in `config.json` as strings.
+1. Войдите в IntraService через обычный браузер.
+2. Откройте существующую заявку в режиме редактирования.
+3. Откройте инструменты разработчика браузера.
+4. Найдите элементы нужных полей внутри формы заявки.
+5. Скопируйте HTML-атрибут `name` для заявителя, местонахождения, кабинета и
+   решения.
+6. Посмотрите `<option value="...">` у статусов, местонахождений, исполнителей и
+   категорий.
+7. Запишите значения в `config.json` как строки.
 
-Example HTML:
+Пример HTML:
 
 ```html
 <select name="statusid">
-  <option value="1" selected>Open</option>
-  <option value="2">Closed</option>
+  <option value="1" selected>Открыта</option>
+  <option value="2">Закрыта</option>
 </select>
 
 <input name="field1003" value="101">
 ```
 
-This example means the current status ID is `1`, the closed status ID may be
-`2`, and the cabinet field name is `field1003`.
+В этом примере ID текущего статуса равен `1`, ID закрытого статуса может быть
+`2`, а имя поля кабинета равно `field1003`.
 
-### Creation template ticket
+### Заявка-шаблон для создания
 
-`template_task_id` points to an existing ticket whose form supplies safe default
-values. During creation, the bot reads that form, changes the configured title,
-description, requester, location, cabinet, status, categories and optional
-executor, then submits it as a new ticket. The source ticket is not modified.
+`template_task_id` указывает на существующую заявку, форма которой предоставляет
+безопасные значения по умолчанию. При создании бот читает форму, заменяет
+настроенные название, описание, заявителя, местонахождение, кабинет, статус,
+категории и необязательного исполнителя, после чего сохраняет новую заявку.
+Исходная заявка не изменяется.
 
-Create a generic automation template ticket that contains no personal or
-sensitive information. Test it on a staging helpdesk first.
+Создайте отдельную универсальную заявку-шаблон без персональных и чувствительных
+данных. Сначала проверьте её на тестовом стенде.
 
-### Ticket-list columns
+### Колонки списка заявок
 
-`list_columns` uses zero-based column indexes. If the bot displays an executor
-as a title or cannot find ticket IDs, inspect a row in the task-list table and
-count its `<td>` cells starting at zero.
+В `list_columns` используются индексы с нуля. Если вместо темы показывается
+исполнитель или бот не находит ID, откройте строку таблицы в инструментах
+разработчика и посчитайте элементы `<td>`, начиная с нуля.
 
-The bot currently recognizes common English and Russian closed-status labels in
-the list. If your installation uses another language or custom wording, closed
-tickets may appear in the list until the status matching is extended.
+Сейчас бот распознаёт распространённые русские и английские названия закрытых
+статусов. Если в вашей установке используется другой язык или нестандартное
+название, закрытые заявки могут отображаться в списке до расширения правила
+сопоставления.
 
-## First run
+## Первый запуск
 
-Validate the local configuration without printing secrets:
+Проверьте конфигурацию без вывода секретов:
 
 ```bash
 npm run validate
 ```
 
-Run the deterministic self-tests:
+Запустите автономные тесты:
 
 ```bash
 npm test
 ```
 
-Start the bot in the foreground:
+Запустите бота в текущем терминале:
 
 ```bash
 npm start
 ```
 
-A successful Telegram connection prints a line similar to:
+При успешном подключении к Telegram появится строка вида:
 
 ```text
 connected @my_service_desk_bot
 ```
 
-Open the bot in Telegram, send `/menu`, and verify read-only operations first:
+Откройте бота в Telegram, отправьте `/menu` и сначала проверьте операции чтения:
 
-1. Open the ticket list.
-2. Open several ticket cards.
-3. Confirm that IDs, titles, locations and executors are mapped correctly.
-4. Add a harmless solution template.
-5. Test creation and closing on a staging instance or dedicated test tickets.
-6. Install the systemd service only after those checks pass.
+1. Откройте список заявок.
+2. Откройте несколько карточек.
+3. Проверьте ID, темы, местонахождения и исполнителей.
+4. Добавьте безобидный шаблон решения.
+5. Проверьте создание и закрытие на тестовом стенде или специальных тестовых
+   заявках.
+6. Устанавливайте systemd-сервис только после успешной проверки.
 
-## Telegram commands and workflows
+## Команды и сценарии Telegram
 
-### Basic commands
+### Основные команды
 
 ```text
 /menu
 /id
 ```
 
-`/menu` opens the main menu. `/id` returns the sender's numeric Telegram ID when
-the sender is already allowed.
+`/menu` открывает главное меню. `/id` возвращает числовой Telegram ID отправителя,
+если этот пользователь уже находится в белом списке.
 
-### Creating a ticket
+### Создание заявки
 
-Use the menu or send:
-
-```text
-/create Title | cabinet | location_key | category_key | optional_executor_key
-```
-
-Example with synthetic keys:
+Через меню или командой:
 
 ```text
-/create Replace test keyboard | 101 | main | workstation | admin
+/create Тема | кабинет | ключ_местонахождения | ключ_категории | необязательный_ключ_исполнителя
 ```
 
-The bot displays a preview. The ticket is created only after **Confirm
-creation** is pressed. After saving, the bot reads the new ticket and verifies
-its status, title, cabinet and location.
-
-### Adding a solution template
+Синтетический пример:
 
 ```text
-/template Name | Category | minutes | Solution text
+/create Заменить тестовую клавиатуру | 101 | main | workstation | admin
 ```
 
-Example:
+Бот покажет предпросмотр. Заявка создаётся только после нажатия **Подтвердить
+создание**. После сохранения бот повторно читает новую заявку и проверяет статус,
+тему, кабинет и местонахождение.
+
+### Добавление шаблона решения
 
 ```text
-/template Restart print service | Printers | 15 | The print service was restarted.
+/template Название | Категория | минуты | Текст решения
 ```
 
-Minutes must be an integer from 1 to 1440. Templates are stored in the local
-SQLite database. They can be enabled or disabled from the Telegram template
-menu.
-
-### Closing one ticket
+Пример:
 
 ```text
-Ticket list
-→ open ticket card
-→ Close
-→ choose a template or enter a solution manually
-→ choose or enter minutes
-→ review preview
-→ Confirm
+/template Перезапуск печати | Принтеры | 15 | Выполнен перезапуск службы печати.
 ```
 
-The bot reads and verifies the ticket before reporting success.
+Трудозатраты задаются целым числом от 1 до 1440 минут. Шаблоны хранятся в
+локальной SQLite. Через раздел шаблонов в Telegram их можно включать и отключать.
 
-### Closing several tickets
+### Закрытие одной заявки
 
 ```text
-Ticket list
-→ Selection mode
-→ select 2–10 full-width ticket rows
-→ Close selected
-→ choose one solution and work time
-→ review preview
-→ Confirm
+Список заявок
+→ открыть карточку
+→ Закрыть
+→ выбрать шаблон или ввести решение вручную
+→ выбрать или ввести минуты
+→ проверить предпросмотр
+→ Подтвердить
 ```
 
-The bot closes the selected tickets sequentially. The same solution and work
-time are applied to each ticket. The final message shows the result for every
-ticket.
+Перед сообщением об успехе бот заново читает и проверяет карточку.
 
-Selection is stored in SQLite for two hours and survives pagination or a bot
-restart.
+### Закрытие нескольких заявок
 
-## Running with systemd
+```text
+Список заявок
+→ Режим выбора
+→ выбрать 2–10 полноширинных строк
+→ Закрыть выбранные
+→ выбрать общее решение и трудозатраты
+→ проверить предпросмотр
+→ Подтвердить
+```
 
-The included user service assumes this repository is located at:
+Заявки закрываются последовательно. Для каждой используется одинаковый текст
+решения и одинаковое число минут. В итоговом сообщении отображается результат
+каждой заявки.
+
+Выбор хранится в SQLite два часа и не теряется при переключении страниц или
+перезапуске бота.
+
+## Запуск через systemd
+
+Готовый пользовательский unit предполагает, что репозиторий находится здесь:
 
 ```text
 ~/intraservice-telegram-bot
 ```
 
-Install and start it:
+Установка и запуск:
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -483,37 +489,37 @@ systemctl --user enable --now intraservice-telegram-bot.service
 systemctl --user status intraservice-telegram-bot.service
 ```
 
-View logs:
+Просмотр журнала:
 
 ```bash
 journalctl --user -u intraservice-telegram-bot.service -f
 ```
 
-Restart after a configuration change:
+Перезапуск после изменения конфигурации:
 
 ```bash
 systemctl --user restart intraservice-telegram-bot.service
 ```
 
-Stop and disable:
+Остановка и отключение автозапуска:
 
 ```bash
 systemctl --user disable --now intraservice-telegram-bot.service
 ```
 
-If the repository is installed elsewhere, edit `WorkingDirectory`, `ExecStart`
-and `EnvironmentFile` in the copied unit.
+Если проект установлен в другом месте, измените `WorkingDirectory`, `ExecStart`
+и `EnvironmentFile` в скопированном unit-файле.
 
-For a user service that must start after boot without an interactive login, a
-system administrator may need to enable lingering for that account:
+Чтобы пользовательский сервис стартовал после загрузки системы без интерактивного
+входа, системному администратору может потребоваться включить lingering:
 
 ```bash
-sudo loginctl enable-linger YOUR_LINUX_USER
+sudo loginctl enable-linger ИМЯ_LINUX_ПОЛЬЗОВАТЕЛЯ
 ```
 
-## Updating
+## Обновление
 
-Review release notes before updating, then run:
+Перед обновлением прочитайте примечания к релизу, затем выполните:
 
 ```bash
 cd ~/intraservice-telegram-bot
@@ -524,19 +530,19 @@ systemctl --user restart intraservice-telegram-bot.service
 systemctl --user status intraservice-telegram-bot.service
 ```
 
-Do not overwrite `.env`, `config.json`, `data/` or the browser profile. Git
-ignores them.
+Не перезаписывайте `.env`, `config.json`, `data/` и профиль браузера. Git их
+игнорирует.
 
-## Data and backups
+## Данные и резервное копирование
 
-Runtime state is stored under the paths configured in `config.json`:
+Runtime-данные находятся по путям, указанным в `config.json`:
 
-- SQLite database: templates, selections and compact audit rows;
-- browser profile: authenticated Chromium session;
-- `.env`: Telegram and IntraService credentials;
-- `config.json`: organization-specific IDs and mappings.
+- SQLite содержит шаблоны, текущий выбор и краткий аудит;
+- профиль браузера содержит авторизованную сессию Chromium;
+- `.env` содержит учётные данные Telegram и IntraService;
+- `config.json` содержит внутренние ID и сопоставления организации.
 
-Stop the service before making a simple filesystem backup:
+Для простого файлового backup сначала остановите сервис:
 
 ```bash
 systemctl --user stop intraservice-telegram-bot.service
@@ -545,58 +551,58 @@ cp -a .env config.json data.backup/
 systemctl --user start intraservice-telegram-bot.service
 ```
 
-Store that backup in a protected location. It may contain credentials, personal
-data and an authenticated browser session. Do not commit it to GitHub.
+Храните резервную копию в защищённом месте. В ней могут находиться credentials,
+персональные данные и авторизованная браузерная сессия. Не добавляйте её в GitHub.
 
-For a live SQLite backup without stopping the service, use SQLite's `.backup`
-command or another SQLite-aware backup tool instead of copying an active
-database file directly.
+Для резервного копирования работающей SQLite без остановки сервиса используйте
+команду SQLite `.backup` или другой SQLite-aware инструмент. Не копируйте файл
+активной базы обычной командой.
 
-## Testing
+## Тестирование
 
-Run all local checks:
+Полная локальная проверка:
 
 ```bash
 npm run ci
 npm audit --omit=dev
 ```
 
-The test suite checks:
+Набор тестов проверяет:
 
-- example configuration validation;
-- structured create and template parsers;
-- SQLite template CRUD;
-- durable selection and the 10-ticket limit;
-- normal and selection-mode keyboard layouts;
-- Telegram's 64-byte callback-data limit.
+- пример конфигурации;
+- parser структурированного создания и шаблонов;
+- SQLite CRUD шаблонов;
+- durable selection и ограничение в 10 заявок;
+- обычную клавиатуру и режим выбора;
+- ограничение Telegram callback data в 64 байта.
 
-The tests do not contact Telegram or a live IntraService instance.
+Тесты не обращаются к Telegram или рабочему IntraService.
 
-## Troubleshooting
+## Решение проблем
 
 ### `TELEGRAM_BOT_TOKEN is missing`
 
-Check that `.env` exists in the repository root and contains the real token.
-When using systemd, confirm that `EnvironmentFile` points to the same file.
+Проверьте наличие `.env` в корне проекта и настоящий токен внутри. При запуске
+через systemd убедитесь, что `EnvironmentFile` указывает на тот же файл.
 
 ### `TELEGRAM_ALLOWED_USERS is empty`
 
-Set one or more numeric IDs separated by commas:
+Укажите один или несколько числовых ID через запятую:
 
 ```dotenv
 TELEGRAM_ALLOWED_USERS=123456789,987654321
 ```
 
-### The bot starts, but ignores a user
+### Бот запущен, но игнорирует пользователя
 
-The sender's numeric Telegram ID is not in the allowlist. Usernames and phone
-numbers do not work as allowlist entries.
+Telegram ID отправителя отсутствует в белом списке. Имя пользователя и номер
+телефона для белого списка не подходят.
 
 ### `INTRASERVICE_LOGIN_FAILED`
 
-Check the login, password, `base_url`, and selectors under `selectors`. Delete
-the local browser profile only if you intentionally want to discard its saved
-session:
+Проверьте логин, пароль, `base_url` и значения раздела `selectors`. Удаляйте
+локальный профиль браузера только если хотите намеренно сбросить сохранённую
+сессию:
 
 ```bash
 systemctl --user stop intraservice-telegram-bot.service
@@ -604,117 +610,118 @@ mv data/browser-profile data/browser-profile.old
 systemctl --user start intraservice-telegram-bot.service
 ```
 
-Do not publish the old profile. Remove it after confirming the new login works.
+Не публикуйте старый профиль. После успешного входа его можно удалить.
 
-### Chromium does not start
+### Chromium не запускается
 
-Install the browser and required system libraries:
+Установите браузер и системные библиотеки:
 
 ```bash
 npx playwright install chromium
 npx playwright install --with-deps chromium
 ```
 
-The second command may require administrator privileges.
+Для второй команды могут потребоваться административные права.
 
-### Ticket list columns are mixed up
+### Колонки списка перепутаны
 
-Adjust `task_table_index` and `list_columns`. Both table and column indexes start
-at zero.
+Настройте `task_table_index` и `list_columns`. Индексы таблицы и колонок начинаются
+с нуля.
 
 ### `CREATE_TEMPLATE_NOT_FOUND`
 
-Check `template_task_id`. The configured ticket must exist and its page must
-contain an editable form for the automation account.
+Проверьте `template_task_id`. Заявка должна существовать, быть доступна учётной
+записи автоматизации и содержать редактируемую форму.
 
 ### `TASK_NOT_FOUND`
 
-The ticket does not exist, the account cannot access it, or the IntraService
-page structure differs from the supported layout.
+Заявка не существует, недоступна текущей учётной записи или структура страницы
+вашей версии IntraService отличается от поддерживаемой.
 
 ### `CREATE_VERIFY_FAILED`
 
-The save request returned, but the new ticket did not contain the expected
-status, title, cabinet or location. Check field names, status IDs and template
-form defaults. The bot refuses to claim success in this case.
+Запрос сохранения вернулся, но новая заявка не содержит ожидаемый статус, тему,
+кабинет или местонахождение. Проверьте имена полей, ID статусов и значения формы
+заявки-шаблона. Бот намеренно не сообщает об успехе при такой проверке.
 
 ### `CLOSE_VERIFY_FAILED`
 
-The ticket was re-read after saving, but status, exact solution text or work time
-did not match. Check `statuses.closed`, `fields.solution`, executor permissions
-and the expense fields used by your IntraService installation.
+После сохранения бот перечитал карточку, но статус, точный текст решения или
+трудозатраты не совпали. Проверьте `statuses.closed`, `fields.solution`, права
+исполнителя и поля трудозатрат в вашей установке IntraService.
 
-### Telegram requests time out
+### Telegram-запросы завершаются по timeout
 
-Check outbound access to `api.telegram.org`. If your network requires a proxy,
-set `TELEGRAM_PROXY`. The current client supports HTTP and HTTPS CONNECT proxies
-for HTTPS Telegram requests.
+Проверьте доступ к `api.telegram.org`. Если сеть требует прокси, заполните
+`TELEGRAM_PROXY`. Клиент поддерживает HTTP- и HTTPS CONNECT-прокси для HTTPS-
+запросов Telegram.
 
-### systemd service repeatedly restarts
+### systemd постоянно перезапускает сервис
 
-Inspect the recent journal:
+Посмотрите последние строки журнала:
 
 ```bash
 journalctl --user -u intraservice-telegram-bot.service -n 200 --no-pager
 ```
 
-Then run `npm run validate` from the repository directory. Common causes are an
-invalid working directory, missing `.env`, missing Chromium or incorrect file
-permissions.
+После этого выполните `npm run validate` в каталоге проекта. Частые причины:
+неверный рабочий каталог, отсутствующий `.env`, неустановленный Chromium или
+неподходящие права файлов.
 
-## Security notes
+## Безопасность
 
-- Use a dedicated IntraService account with only the permissions the bot needs.
-- Keep the Telegram allowlist small.
-- Set `.env` and `config.json` to mode `0600`.
-- Do not commit credentials, `data/`, SQLite files, cookies, browser profiles or
-  logs.
-- Do not paste real credentials into GitHub issues or CI variables for this
-  public repository.
-- Test every organization-specific mapping on staging before production use.
-- Keep preview, confirmation, fresh reads and post-save verification when
-  modifying the code.
-- Treat the browser profile as a credential because it contains an authenticated
-  session.
+- Используйте отдельную учётную запись IntraService только с необходимыми правами.
+- Не раздувайте белый список Telegram без необходимости.
+- Установите права `0600` для `.env` и `config.json`.
+- Не добавляйте в Git credentials, `data/`, SQLite, cookies, профили браузера и
+  журналы.
+- Не отправляйте настоящие секреты в GitHub issues или CI публичного репозитория.
+- Проверяйте внутренние ID и сопоставления на тестовом стенде.
+- Не удаляйте из кода предпросмотр, подтверждение, свежее чтение и проверку после
+  сохранения.
+- Считайте профиль браузера полноценным credential: в нём находится
+  авторизованная сессия.
 
-Report sensitive vulnerabilities through GitHub private vulnerability reporting,
-not a public issue. See [SECURITY.md](SECURITY.md).
+Чувствительные уязвимости сообщайте через GitHub private vulnerability reporting,
+а не через публичный issue. Дополнительные правила находятся в
+[SECURITY.md](SECURITY.md).
 
-## Current limitations
+## Текущие ограничения
 
-Version 0.1.0 is a generic community core. It does not include:
+Версия 0.1.0 содержит универсальное community-ядро. В неё не входят:
 
-- organization-specific mail processing rules;
-- automatic daily ticket generation or approval schedules;
-- employee directories bundled with the source;
-- AI-provider integrations;
-- Docker packaging;
-- a web administration panel;
-- automatic discovery of custom IntraService field IDs;
-- automated integration tests against every IntraService version.
+- внутренние правила обработки почтовых заявок конкретной организации;
+- автоматическая ежедневная генерация заявок и расписание согласования;
+- готовые справочники сотрудников;
+- интеграции с AI-провайдерами;
+- Docker-образ;
+- отдельная веб-панель администрирования;
+- автоматическое определение дополнительных полей IntraService;
+- интеграционные тесты для всех версий IntraService.
 
-IntraService installations can customize forms and table layouts, so initial
-mapping and a staging acceptance test are required.
+Формы и таблицы IntraService могут быть настроены по-разному, поэтому перед
+production требуется ручное сопоставление и проверка на тестовом стенде.
 
-## Project files
+## Структура проекта
 
 ```text
-src/app.mjs                  Telegram workflows and confirmations
-src/intraservice_client.mjs  Playwright IntraService adapter
-src/telegram_client.mjs      Telegram HTTP transport
-src/storage.mjs              SQLite templates, selection and audit
-src/config.mjs               Configuration loading and validation
-src/ui.mjs                   Telegram keyboards and ticket cards
-config.example.json          Synthetic IntraService configuration
-.env.example                 Environment variable template
-systemd/                     User service example
-test/                        Offline deterministic self-tests
+src/app.mjs                  Telegram-сценарии и подтверждения
+src/intraservice_client.mjs  Playwright-адаптер IntraService
+src/telegram_client.mjs      HTTP-клиент Telegram
+src/storage.mjs              SQLite: шаблоны, выбор и аудит
+src/config.mjs               Загрузка и проверка конфигурации
+src/ui.mjs                   Клавиатуры Telegram и карточки
+config.example.json          Синтетический пример IntraService
+.env.example                 Шаблон переменных окружения
+systemd/                     Пример пользовательского сервиса
+test/                        Автономные детерминированные тесты
 ```
 
-## Contributing and license
+## Участие в разработке и лицензия
 
-Issues and pull requests are welcome. Mutation changes must preserve preview,
-explicit confirmation, fresh reads, sequential batch execution and post-save
-verification. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues и pull requests принимаются. Изменения mutation-flow должны сохранять
+предпросмотр, отдельное подтверждение, свежее чтение карточки, последовательное
+массовое выполнение и проверку после сохранения. Правила находятся в
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-Released under the [MIT License](LICENSE).
+Проект распространяется по [лицензии MIT](LICENSE).
