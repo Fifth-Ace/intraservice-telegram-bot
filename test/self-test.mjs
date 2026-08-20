@@ -148,7 +148,7 @@ assert.ok(closeState.closeDraft);
 const executed=await executeCloseConfirmation({data:`confirm:single:${revision}`,state:closeState,messageId:501,onAccepted:()=>{acceptedState={mode:closeState.mode,draft:closeState.closeDraft}},closeOne:async(...args)=>{mutations.push(args);return{state:'Closed'}}});
 assert.deepEqual(acceptedState,{mode:'closing',draft:null});
 assert.equal(mutations.length,1);
-assert.deepEqual(mutations[0],['101',{solution:'Generic solution.',minutes:15}]);
+assert.deepEqual(mutations[0],['101',{solution:'Generic solution.',minutes:15,operationId:revision,scope:'single'}]);
 assert.equal(executed.results[0].state,'Closed');
 assert.equal(closeState.mode,null);
 assert.equal(closeState.closeDraft,null);
