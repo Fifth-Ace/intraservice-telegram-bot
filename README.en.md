@@ -20,7 +20,7 @@ reusable solution templates in SQLite.
 - full-width normal list and separate full-width selection mode;
 - selection of up to 10 tickets, stored in SQLite for two hours;
 - single and sequential batch closing;
-- reusable solution templates with default work time;
+- reusable solution templates with categories, popular templates, pagination and default work time;
 - manual solution and minute entry;
 - ticket creation from Telegram;
 - Playwright and Chromium connection to IntraService;

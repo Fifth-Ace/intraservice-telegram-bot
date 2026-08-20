@@ -432,6 +432,13 @@ Minutes must be an integer from 1 to 1440. Templates are stored in the local
 SQLite database. They can be enabled or disabled from the Telegram template
 menu.
 
+Active templates are grouped automatically by their Category value. Single and
+batch closing provide popular templates, category selection, a paginated full
+catalog, and manual entry. Every category button shows its active-template count.
+Long categories are split into pages, so templates remain reachable as the
+catalog grows. Category names and templates exist only in the local database of
+each installation.
+
 ### Closing one ticket
 
 ```text
