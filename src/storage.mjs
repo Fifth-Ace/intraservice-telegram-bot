@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
+import {normalizeNonNegativeInt} from './navigation.mjs';
 
 export class Storage{
  constructor(file){fs.mkdirSync(path.dirname(file),{recursive:true});this.db=new DatabaseSync(file);this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
@@ -11,7 +12,9 @@ export class Storage{
  close(){this.db.close()}
  audit({userId='',action,ticketId='',result='ok',details={}}){this.db.prepare('INSERT INTO audit(at,user_id,action,ticket_id,result,details) VALUES(?,?,?,?,?,?)').run(new Date().toISOString(),String(userId),action,String(ticketId),result,JSON.stringify(details))}
  addTemplate({category,name,solution,minutes}){category=String(category||'').trim();name=String(name||'').trim();solution=String(solution||'').trim();minutes=Number(minutes);if(!category||!name||!solution||!Number.isInteger(minutes)||minutes<1||minutes>1440)throw Error('TEMPLATE_INVALID');const now=new Date().toISOString();return Number(this.db.prepare('INSERT INTO templates(category,name,solution,default_minutes,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(category,name,solution,minutes,now,now).lastInsertRowid)}
- listTemplates({active=true,limit=20}={}){return this.db.prepare(`SELECT * FROM templates WHERE active=? ORDER BY use_count DESC,COALESCE(last_used_at,updated_at) DESC,name LIMIT ?`).all(active?1:0,Math.max(1,Math.min(Number(limit)||20,50)))}
+ listTemplateCategories({active=true}={}){return this.db.prepare('SELECT category,COUNT(*) count FROM templates WHERE active=? GROUP BY category ORDER BY category COLLATE NOCASE').all(active?1:0).map(x=>({...x,count:Number(x.count)}))}
+ countTemplates({active=true,category=''}={}){const filter=String(category||'').trim();return Number((filter?this.db.prepare('SELECT COUNT(*) count FROM templates WHERE active=? AND category=?').get(active?1:0,filter):this.db.prepare('SELECT COUNT(*) count FROM templates WHERE active=?').get(active?1:0)).count)}
+ listTemplates({active=true,limit=20,offset=0,category='',order='popular'}={}){const take=Math.max(1,Math.min(normalizeNonNegativeInt(limit,{fallback:20}),50)),skip=normalizeNonNegativeInt(offset),filter=String(category||'').trim(),sort=order==='name'?'name COLLATE NOCASE,id':'use_count DESC,COALESCE(last_used_at,updated_at) DESC,name COLLATE NOCASE,id',where=filter?'active=? AND category=?':'active=?',params=filter?[active?1:0,filter,take,skip]:[active?1:0,take,skip];return this.db.prepare(`SELECT * FROM templates WHERE ${where} ORDER BY ${sort} LIMIT ? OFFSET ?`).all(...params)}
  getTemplate(id,{activeOnly=false}={}){return this.db.prepare(`SELECT * FROM templates WHERE id=?${activeOnly?' AND active=1':''}`).get(Number(id))||null}
  toggleTemplate(id){const row=this.getTemplate(id);if(!row)return null;this.db.prepare('UPDATE templates SET active=?,updated_at=? WHERE id=?').run(row.active?0:1,new Date().toISOString(),Number(id));return this.getTemplate(id)}
  markTemplateUsed(id){this.db.prepare('UPDATE templates SET use_count=use_count+1,last_used_at=? WHERE id=? AND active=1').run(new Date().toISOString(),Number(id))}
