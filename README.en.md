@@ -32,6 +32,11 @@ reusable solution templates in SQLite.
 Redis and PostgreSQL are not required. The bot uses Node.js's built-in SQLite
 driver.
 
+Optionally you can install a standalone web dashboard alongside the bot — an
+admin panel with live metrics, a ticket queue with cancel, a journal and
+IntraService/Telegram connection settings: see
+[Admin Panel (dashboard)](https://github.com/Fifth-Ace/intraservice-admin-panel).
+
 ## Mutation safety
 
 Choosing a template does not close a ticket. Create and close operations use this
