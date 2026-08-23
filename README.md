@@ -165,6 +165,7 @@ journalctl --user -u intraservice-telegram-bot.service -f
 | [Full English manual](docs/en/MANUAL.md) | Complete English installation and administration guide |
 | [Official API beta](docs/API_BETA.md) | Безопасное включение API, recovery, rollback и ограничения beta |
 | [SECURITY.md](SECURITY.md) | Правила безопасности и сообщение об уязвимостях |
+| [Admin Panel (дашборд)](https://github.com/Fifth-Ace/intraservice-admin-panel) | Отдельный модуль: живой дашборд, очередь с отменой, настройки подключения |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Требования к изменениям и pull requests |
 | [Releases](https://github.com/Fifth-Ace/intraservice-telegram-bot/releases) | Опубликованные версии и примечания к релизам |
 
